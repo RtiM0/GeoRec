@@ -17,6 +17,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 }
 
 dependencies {
@@ -26,6 +30,7 @@ dependencies {
     implementation 'com.github.quentin7b:android-location-tracker:3.2'
     implementation 'org.jetbrains:annotations-java5:15.0'
     implementation 'org.osmdroid:osmdroid-android:6.1.5'
+    implementation 'com.github.yashovardhan99:TimeIt:1.2.0'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.1.1'

@@ -32,6 +32,7 @@ import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.yashovardhan99.timeit.Stopwatch;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -50,14 +51,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements Stopwatch.OnTickListener {
 
     public File da;
     Button play;
     TextView inf;
     JSONArray data = new JSONArray();
     int flag = 0;
-    int i = 0;
     FileOutputStream fileOutputStream;
     MapView map = null;
     ArrayList<OverlayItem> items = new ArrayList<OverlayItem>();
@@ -65,6 +65,8 @@ public class MainActivity extends AppCompatActivity {
     LocationRequest mLocationRequest;
     LocationCallback mLocationCallback;
     FusedLocationProviderClient mFusedLocationProviderClient;
+    Stopwatch stopwatch;
+    long universalTime = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,6 +84,9 @@ public class MainActivity extends AppCompatActivity {
         map.setTileSource(TileSourceFactory.MAPNIK);
         map.setBuiltInZoomControls(true);
         map.setMultiTouchControls(true);
+        stopwatch = new Stopwatch();
+        stopwatch.setOnTickListener(this);
+
         play.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -93,7 +98,6 @@ public class MainActivity extends AppCompatActivity {
                     createLocationRequest();
                 } else {
                     stopLocationUpdates();
-                    i = 0;
                     flag = 0;
                     play.setText("START RECORDING");
                     try {
@@ -128,25 +132,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     protected void createLocationRequest() {
-
+        stopwatch.start();
         mLocationRequest = new LocationRequest();
-
         mLocationRequest.setInterval(2000);
-
-        mLocationRequest.setFastestInterval(2000);
-
-        mLocationRequest.setSmallestDisplacement(0);
-
+        mLocationRequest.setFastestInterval(1000);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-
         LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder()
-
                 .addLocationRequest(mLocationRequest);
-
         SettingsClient client = LocationServices.getSettingsClient(this);
-
         Task<LocationSettingsResponse> task = client.checkLocationSettings(builder.build());
-
         task.addOnSuccessListener(this, new OnSuccessListener<LocationSettingsResponse>() {
 
             @Override
@@ -159,21 +153,16 @@ public class MainActivity extends AppCompatActivity {
 
                 // ...
                 startLocationUpdates();
-
             }
 
         });
-
         task.addOnFailureListener(this, new OnFailureListener() {
 
             @Override
 
             public void onFailure(@NonNull Exception e) {
-
                 int statusCode = ((ApiException) e).getStatusCode();
-
                 switch (statusCode) {
-
                     case CommonStatusCodes.RESOLUTION_REQUIRED:
 
                         // Location settings are not satisfied, but this can be fixed
@@ -187,31 +176,19 @@ public class MainActivity extends AppCompatActivity {
                             // and check the result in onActivityResult().
 
                             ResolvableApiException resolvable = (ResolvableApiException) e;
-
                             resolvable.startResolutionForResult(MainActivity.this, 1);
-
                         } catch (IntentSender.SendIntentException sendEx) {
-
                             // Ignore the error.
-
                         }
-
                         break;
-
                     case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-
                         // Location settings are not satisfied. However, we have no way
-
                         // to fix the settings so we won't show the dialog.
-
                         break;
-
                 }
-
             }
 
         });
-
     }
 
     private void startLocationUpdates() {
@@ -219,23 +196,21 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 for (Location location : locationResult.getLocations()) {
-                    int secs = i;
                     JSONObject cur = new JSONObject();
                     String co = location.getLatitude() + "," + location.getLongitude();
                     String ex = inf.getText().toString();
-                    String infer = ex + "\nTime: " + secs + " secs\n CO: " + co;
+                    String infer = ex + "\nTime: " + universalTime / 1000 + " secs\n CO: " + co;
                     inf.setText(infer);
                     try {
-                        cur.put("time", secs);
+                        cur.put("time", universalTime / 1000);
                         cur.put("loc", co);
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
                     Log.d("onLocationResult: ", location.getLatitude() + "," + location.getLongitude());
                     data.put(cur);
-                    items.add(new OverlayItem("Time", secs + " Seconds", new GeoPoint(location.getLatitude(), location.getLongitude())));
+                    items.add(new OverlayItem("Time", universalTime / 1000 + " Seconds", new GeoPoint(location.getLatitude(), location.getLongitude())));
                     geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-                    i = i + 2;
                 }
             }
         };
@@ -269,6 +244,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void stopLocationUpdates() {
         mFusedLocationProviderClient.removeLocationUpdates(mLocationCallback);
+        stopwatch.stop();
     }
 
     public void onResume() {
@@ -287,5 +263,10 @@ public class MainActivity extends AppCompatActivity {
         //SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         //Configuration.getInstance().save(this, prefs);
         map.onPause();  //needed for compass, my location overlays, v6.0.0 and up
+    }
+
+    @Override
+    public void onTick(Stopwatch stopwatch) {
+        universalTime = stopwatch.getElapsedTime();
     }
 }
