@@ -57,7 +57,6 @@ public class MainActivity extends AppCompatActivity {
     TextView inf;
     JSONArray data = new JSONArray();
     int flag = 0;
-    int uni = 0;
     int i = 0;
     FileOutputStream fileOutputStream;
     MapView map = null;
@@ -88,14 +87,12 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 if (flag == 0) {
                     data = new JSONArray();
-                    uni = 0;
                     play.setText("STOP RECORDING");
                     inf.setText("");
                     flag = 1;
                     createLocationRequest();
                 } else {
                     stopLocationUpdates();
-                    uni = -1;
                     i = 0;
                     flag = 0;
                     play.setText("START RECORDING");
