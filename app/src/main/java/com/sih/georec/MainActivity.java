@@ -1,21 +1,38 @@
 package com.sih.georec;
 
-import android.content.Intent;
+import android.Manifest;
+import android.content.IntentSender;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.common.api.CommonStatusCodes;
+import com.google.android.gms.common.api.ResolvableApiException;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.LocationSettingsRequest;
+import com.google.android.gms.location.LocationSettingsResponse;
+import com.google.android.gms.location.LocationSettingsStatusCodes;
+import com.google.android.gms.location.SettingsClient;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -33,8 +50,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import mumayank.com.airlocationlibrary.AirLocation;
-
 public class MainActivity extends AppCompatActivity {
 
     public File da;
@@ -48,13 +63,16 @@ public class MainActivity extends AppCompatActivity {
     MapView map = null;
     ArrayList<OverlayItem> items = new ArrayList<OverlayItem>();
     GeoPoint geoPoint;
-    private AirLocation airLocation;
+    LocationRequest mLocationRequest;
+    LocationCallback mLocationCallback;
+    FusedLocationProviderClient mFusedLocationProviderClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Configuration.getInstance().load(getApplicationContext(), PreferenceManager.getDefaultSharedPreferences(getApplicationContext()));
         setContentView(R.layout.activity_main);
+        mFusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
         da = new File(Environment.getExternalStorageDirectory().toString(), "georec");
         if (!da.exists()) {
             da.mkdirs();
@@ -74,8 +92,9 @@ public class MainActivity extends AppCompatActivity {
                     play.setText("STOP RECORDING");
                     inf.setText("");
                     flag = 1;
-                    repeater();
+                    createLocationRequest();
                 } else {
+                    stopLocationUpdates();
                     uni = -1;
                     i = 0;
                     flag = 0;
@@ -111,61 +130,148 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    void repeater() {
-        final Handler handler = new Handler();
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (uni != -1) {
-                    getloc(i);
-                    i = i + 2;
-                    repeater();
-                }
-            }
-        }, 2000);
-    }
+    protected void createLocationRequest() {
 
-    void getloc(final int secs) {
-        airLocation = new AirLocation(this, true, true, new AirLocation.Callbacks() {
-            @Override
-            public void onSuccess(@NotNull Location location) {
-                // do something
+        mLocationRequest = new LocationRequest();
 
-                JSONObject cur = new JSONObject();
-                String co = location.getLatitude() + "," + location.getLongitude();
-                String ex = inf.getText().toString();
-                String infer = ex + "\nTime: " + secs + " secs\n CO: " + co;
-                inf.setText(infer);
-                try {
-                    cur.put("time", secs);
-                    cur.put("loc", co);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-                data.put(cur);
-                items.add(new OverlayItem("Time", secs + " Seconds", new GeoPoint(location.getLatitude(), location.getLongitude())));
-                geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-            }
+        mLocationRequest.setInterval(2000);
+
+        mLocationRequest.setFastestInterval(2000);
+
+        mLocationRequest.setSmallestDisplacement(0);
+
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+
+        LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder()
+
+                .addLocationRequest(mLocationRequest);
+
+        SettingsClient client = LocationServices.getSettingsClient(this);
+
+        Task<LocationSettingsResponse> task = client.checkLocationSettings(builder.build());
+
+        task.addOnSuccessListener(this, new OnSuccessListener<LocationSettingsResponse>() {
 
             @Override
-            public void onFailed(@NotNull AirLocation.LocationFailedEnum locationFailedEnum) {
-                // do something
+
+            public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
+
+                // All location settings are satisfied. The client can initialize
+
+                // location requests here.
+
+                // ...
+                startLocationUpdates();
+
             }
+
         });
+
+        task.addOnFailureListener(this, new OnFailureListener() {
+
+            @Override
+
+            public void onFailure(@NonNull Exception e) {
+
+                int statusCode = ((ApiException) e).getStatusCode();
+
+                switch (statusCode) {
+
+                    case CommonStatusCodes.RESOLUTION_REQUIRED:
+
+                        // Location settings are not satisfied, but this can be fixed
+
+                        // by showing the user a dialog.
+
+                        try {
+
+                            // Show the dialog by calling startResolutionForResult(),
+
+                            // and check the result in onActivityResult().
+
+                            ResolvableApiException resolvable = (ResolvableApiException) e;
+
+                            resolvable.startResolutionForResult(MainActivity.this, 1);
+
+                        } catch (IntentSender.SendIntentException sendEx) {
+
+                            // Ignore the error.
+
+                        }
+
+                        break;
+
+                    case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
+
+                        // Location settings are not satisfied. However, we have no way
+
+                        // to fix the settings so we won't show the dialog.
+
+                        break;
+
+                }
+
+            }
+
+        });
+
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        airLocation.onActivityResult(requestCode, resultCode, data);
+    private void startLocationUpdates() {
+        mLocationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                for (Location location : locationResult.getLocations()) {
+                    int secs = i;
+                    JSONObject cur = new JSONObject();
+                    String co = location.getLatitude() + "," + location.getLongitude();
+                    String ex = inf.getText().toString();
+                    String infer = ex + "\nTime: " + secs + " secs\n CO: " + co;
+                    inf.setText(infer);
+                    try {
+                        cur.put("time", secs);
+                        cur.put("loc", co);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                    Log.d("onLocationResult: ", location.getLatitude() + "," + location.getLongitude());
+                    data.put(cur);
+                    items.add(new OverlayItem("Time", secs + " Seconds", new GeoPoint(location.getLatitude(), location.getLongitude())));
+                    geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
+                    i = i + 2;
+                }
+            }
+        };
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            // TODO: Consider calling
+
+            //    ActivityCompat#requestPermissions
+
+            // here to request the missing permissions, and then overriding
+
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+
+            //                                          int[] grantResults)
+
+            // to handle the case where the user grants the permission. See the documentation
+
+            // for ActivityCompat#requestPermissions for more details.
+
+            Toast.makeText(getApplicationContext(), "location permission required !!", Toast.LENGTH_SHORT).show();
+
+            return;
+
+        }
+        mFusedLocationProviderClient.requestLocationUpdates(mLocationRequest,
+
+                mLocationCallback,
+
+                null /* Looper */);
     }
 
-    // override and call airLocation object's method by the same name
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        airLocation.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
+    private void stopLocationUpdates() {
+        mFusedLocationProviderClient.removeLocationUpdates(mLocationCallback);
     }
 
     public void onResume() {
